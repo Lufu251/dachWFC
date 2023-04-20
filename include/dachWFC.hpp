@@ -2,10 +2,12 @@
 
 #include <iostream>
 #include <vector>
+#include <array>
 #include <set>
 #include <random>
 #include <queue>
 #include <algorithm>
+#include <numeric>
 
 #include <chrono>
 
@@ -21,6 +23,11 @@ enum direction {UP, RIGHT, DOWN, LEFT};
 struct queueNode{
     uint32_t x, y;
     queueNode(uint32_t xPos, uint32_t yPos): x(xPos), y(yPos){}
+};
+
+struct backTrackNode{
+    uint32_t x, y;
+    std::vector<uint32_t> possiblePatterns;
 };
 
 
@@ -65,7 +72,7 @@ struct waveCell{
     bool queued = false; // was the tile queued
 
     // all patterns that can be picked
-    std::set<uint32_t> possiblePatterns;
+    std::vector<uint32_t> possiblePatterns;
 
     uint32_t getEntropy(){
         return possiblePatterns.size();
@@ -75,6 +82,8 @@ struct waveCell{
         // add all the pattern frequencys together
         uint32_t addedFrequencys = 0;
         std::vector<uint32_t> probabilityValue;
+        probabilityValue.reserve(possiblePatterns.size());
+
         for (auto pP : possiblePatterns){
             // calculate added value of all patterns frequency
             addedFrequencys += rPatterns[pP].frequency;
@@ -97,7 +106,7 @@ struct waveCell{
         // clear the patterns and insert the randomly picked pattern
         uint32_t randomTile = *std::next(possiblePatterns.begin(), index);
         possiblePatterns.clear();
-        possiblePatterns.insert(randomTile);
+        possiblePatterns.push_back(randomTile);
         fix = true; // set fixed to true
     }
 };
@@ -142,13 +151,18 @@ public:
     }
 
     void setAllCellsToMaxEntropy(std::vector<pattern>& rPatterns){
-        std::set<uint32_t> maxEntropy;
+        uint64_t t1 = nanoTime();
+        std::vector<uint32_t> maxEntropy;
+        maxEntropy.reserve(rPatterns.size());
+
         for (uint32_t i = 0; i < rPatterns.size(); i++){
-            maxEntropy.insert(i);
+            maxEntropy.push_back(i);
         }
-        for (size_t i = 0; i < data.size(); i++){
-            data[i].possiblePatterns = maxEntropy;
+        for (auto& d : data){
+            d.possiblePatterns = maxEntropy;
         }
+        uint64_t t2 = nanoTime();
+        std::cout << (t2 - t1) / 1000 / 1000.0 << " milliseconds\n";
     }
 
     void resetQueuedAttribute(){
@@ -198,6 +212,7 @@ public:
     cellGrid2D inputGrid;
     waveGrid backTrackWave1;
     waveGrid backTrackWave2;
+    const std::array<std::pair<int,int>, 4> directions = {{{0, -1}, {1, 0}, {0, 1}, {-1, 0}}};
 
     size_t seed = 0;
     std::vector<pattern> patterns;
@@ -341,13 +356,6 @@ public:
 
     // extract rules from the input
     void createRules(cellGrid2D& input){
-        // all the directions that should be checked
-        std::vector<std::pair<int, int>> directions;
-        directions.push_back({0, -1}); // UP
-        directions.push_back({1, 0}); // RIGHT
-        directions.push_back({0, 1}); // DOWN
-        directions.push_back({-1, 0}); // LEFT
-
         for (uint32_t ix = 0; ix < input.sizeX(); ix++){
             for (uint32_t iy = 0; iy < input.sizeY(); iy++){
                 // iterate all the directions
@@ -368,14 +376,11 @@ public:
         }
     }
 
-    std::set<uint32_t> intersect(const std::set<uint32_t>& a, const std::set<uint32_t>& b) {
-        std::set<uint32_t> result;
+    std::vector<uint32_t> intersect(const std::vector<uint32_t>& a, const std::vector<uint32_t>& b) {
         std::vector<uint32_t> intersections;
+        intersections.reserve(patterns.size());
         std::set_intersection(a.begin(), a.end(), b.begin(), b.end(), std::back_inserter(intersections));
-        for(auto i : intersections){
-            result.insert(i);
-        }
-        return result;
+        return intersections;
     }
 
     // update the grids cells with all the neighbors
@@ -384,13 +389,6 @@ public:
 
         // first queueNode to start the loop
         queue.push(queueNode(collapsX, collapsY));
-
-        // all the directions that should be checked
-        std::vector<std::pair<int, int>> directions;
-        directions.push_back({0, -1}); // UP
-        directions.push_back({1, 0}); // RIGHT
-        directions.push_back({0, 1}); // DOWN
-        directions.push_back({-1, 0}); // LEFT
 
         // loop untile the queue is empty
         while (queue.size()){
@@ -416,9 +414,10 @@ public:
                                 allPatternsInDirection.insert(r);
                             }
                         }
+                        std::vector<uint32_t> allPatterns(allPatternsInDirection.begin(), allPatternsInDirection.end()); // convert set to vector
 
                         // update the neighboring waveCell with allPatternsInDirection
-                        rWave(dx, dy).possiblePatterns = std::move(intersect(rWave(dx, dy).possiblePatterns, allPatternsInDirection));
+                        rWave(dx, dy).possiblePatterns = std::move(intersect(rWave(dx, dy).possiblePatterns, allPatterns));
                     }
                     // add the neighboring waveCell to the queue if it was not queued before
                     if(rWave(dx, dy).queued == false && rWave(dx,dy).getEntropy() != patterns.size()){
@@ -459,7 +458,6 @@ public:
         uint32_t lowest = -1; // Set to max Value
         uint32_t lowestX = -1, lowestY = -1; // Set to max Value
 
-        uint64_t l1 = nanoTime();
         // search waveCell with the lowest entropy
         for (size_t x = 0; x < rWave.sizeX(); x++){
             for (size_t y = 0; y < rWave.sizeY(); y++){
@@ -476,10 +474,6 @@ public:
         }
 
         bool skipCollaps = false;
-        uint64_t u1 = 0;
-        uint64_t u2 = 0;
-        uint64_t pr1 = 0;
-        uint64_t pr2 = 0;
         // check if the wave is collapsed
         if(rWave.collapsed == false){
             // check if the entropy is larger than 1 and pick a random pattern
@@ -504,7 +498,7 @@ public:
                 updateNeighbors(lowestX, lowestY, rWave);
             }
         }
-        backTrackWave2 = backTrackWave1;
+        backTrackWave2 = std::move(backTrackWave1);
         backTrackWave1 = rWave;
     }
 };

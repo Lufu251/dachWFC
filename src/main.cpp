@@ -9,7 +9,7 @@
 //------------------------------------------------------------------------------------
 int main(void){
     const int screenWidth = 1200;
-    const int screenHeight = 900;
+    const int screenHeight = 1200;
     raylib::InitWindow(screenWidth, screenHeight, "wfc");
     SetTargetFPS(60);
 
@@ -188,16 +188,19 @@ int main(void){
 
     wfc.setSeed(5);
     wfc.setPatternSize(1,1);
-    wfc.setOutputSize(18, 18);
+    wfc.setOutputSize(60,60);
 
     waveGrid wave;
     std::mt19937_64 gen(3);
 
+    uint64_t t1 = nanoTime();
     wfc.startWave(wave, gen);
     while (wave.collapsed == false)
     {
         wfc.collapsWave(wave, gen);
     }
+    uint64_t t2 = nanoTime();
+    std::cout << (t2 - t1) / 1000 / 1000.0 << " milliseconds\n";
 
     while (!WindowShouldClose())
     {
