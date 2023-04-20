@@ -188,16 +188,16 @@ int main(void){
 
     wfc.setSeed(5);
     wfc.setPatternSize(1,1);
-    wfc.setOutputSize(60,60);
+    wfc.setOutputSize(200,200);
 
     waveGrid wave;
-    std::mt19937_64 gen(3);
+    std::mt19937_64 gen(5);
 
     uint64_t t1 = nanoTime();
     wfc.startWave(wave, gen);
     while (wave.collapsed == false)
     {
-        wfc.collapsWave(wave, gen);
+        wfc.collapseWave(wave, gen);
     }
     uint64_t t2 = nanoTime();
     std::cout << (t2 - t1) / 1000 / 1000.0 << " milliseconds\n";
@@ -207,7 +207,7 @@ int main(void){
         // Update
         //----------------------------------------------------------------------------------
         if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
-            wfc.collapsWave(wave, gen);
+            wfc.collapseWave(wave, gen);
             
         }
 
@@ -219,7 +219,7 @@ int main(void){
         //----------------------------------------------------------------------------------
         BeginDrawing();
             ClearBackground(GRAY);
-            int size = 50;
+            int size = 10;
             for (size_t x = 0; x < wave.sizeX(); x++){
                 for (size_t y = 0; y < wave.sizeY(); y++){
                     if(wave(x,y).fix == true){
