@@ -7,15 +7,6 @@
 #include <random>
 #include <queue>
 #include <algorithm>
-#include <numeric>
-
-#include <chrono>
-
-uint64_t nanoTime(){
-    using namespace std;
-    using namespace chrono;
-    return duration_cast<nanoseconds>(high_resolution_clock::now().time_since_epoch()).count();
-}
 
 enum direction {UP, RIGHT, DOWN, LEFT};
 
@@ -206,7 +197,7 @@ public:
 };
 
 class dachWFC{
-public:
+private:
     cellGrid2D inputGrid;
     const std::array<std::pair<int,int>, 4> directions = {{{0, -1}, {1, 0}, {0, 1}, {-1, 0}}};
     std::vector<backTrackNode> backTrackNodes; // used to revert the changes if it failes to collapse
@@ -216,6 +207,7 @@ public:
     uint64_t patternX = 0, patternY = 0;
     uint64_t outputSizeX = 0, outputSizeY = 0;
 
+public:
     dachWFC(){}
 
     // seed for random generation
@@ -246,7 +238,7 @@ public:
         patternY = patternSizeY;
     }
 
-    cellGrid2D convertWaveGrid(waveGrid input){
+    cellGrid2D convertWaveGridToCellGrid(waveGrid& input){
         cellGrid2D output(input.sizeX(), input.sizeY());
         for (size_t x = 0; x < input.sizeX(); x++){
             for (size_t y = 0; y < input.sizeY(); y++){
@@ -258,32 +250,23 @@ public:
                 }
             }
         }
-        
-
         return output;
     }
 
-    // extract rules and patterns from the inputGrid
-    void generateRulesFromInput(){
-        cellGrid2D workingGrid;
-        workingGrid = patternTranslate(inputGrid); // translate the inputGrid to patterns
-        createRules(workingGrid); // extract the rules from the working grid
-    }
-    
     // generate an output from all the rules
-    cellGrid2D generateOutput(){
-
-        std::mt19937_64 gen(seed); // random generator
+    waveGrid generateOutput(waveGrid& wave, std::mt19937_64& gen){
         
+        //std::mt19937_64 gen(seed); // random generator
+        // startWave(wave, gen);
         
         // start loop
-
-        // convert waveGrid to cellGrid2D
-
+            collapseWave(wave, gen);
+         
         
-        //return cellTranslate(output);
+        return wave; // cellTranslate the cellGrid2D
     }
 
+public:
     // translate the cellGrid2D to a patterns
     cellGrid2D patternTranslate(cellGrid2D& input){
         cellGrid2D output(input.sizeX() / patternX, input.sizeY() / patternY);
@@ -413,6 +396,7 @@ public:
                                 allPatternsInDirection.insert(r);
                             }
                         }
+
                         std::vector<uint64_t> allPatterns(allPatternsInDirection.begin(), allPatternsInDirection.end()); // convert set to vector
 
                         // update the neighboring waveCell with allPatternsInDirection
@@ -420,23 +404,20 @@ public:
 
                         // check if there are no possible patterns
                         if(rWave(dx, dy).possiblePatterns.size() == 0){
+                            std::cout << "seed does not collapse" << std::endl;
                             // revert changes done in this loop
                             for (auto bt : backTrackNodes){
                                 rWave(bt.x, bt.y).fix = false;
                                 rWave(bt.x, bt.y).possiblePatterns = bt.pP;
                             }
+                            backTrackNodes.clear(); // clear the backTrackNodes
                             break; // break the while loop
                         }
                     }
                     // add the neighboring waveCell to the queue if it was not queued before
                     if(rWave(dx, dy).queued == false && rWave(dx,dy).getEntropy() != patterns.size()){
-                        if(rWave(cn.x, cn.y).fix == true && rWave(dx,dy).fix == true){
-
-                        }
-                        else{
-                            queue.push(queueNode(dx, dy));
-                            rWave(dx, dy).queued = true;
-                        }
+                        queue.push(queueNode(dx, dy));
+                        rWave(dx, dy).queued = true;
                     }
                 }
             }
@@ -491,11 +472,6 @@ public:
                 backTrackNodes.push_back(backTrackNode(lowestX, lowestY, rWave(lowestX, lowestY).possiblePatterns));
                 rWave(lowestX, lowestY).pickRandomPattern(rGen, patterns);
             }
-            // check if the entropy is 0 go back one step and reset gridFullcollapsed to false
-            else if(lowest == 0){
-                //std::cout << "seed does not collapse at: " << "X: " << lowestX << " Y: " << lowestY << std::endl;
-                skipcollapse = true;
-            }
             // check if the tiles entropy is 1 then set the tile to fix and skip the collapseGrid
             else if(lowest == 1){
                 rWave(lowestX, lowestY).fix = true; // set tile to fix
@@ -505,7 +481,6 @@ public:
             if(skipcollapse == false){
                 // collapse the grid from the newest generated tile
                 updateNeighbors(lowestX, lowestY, rWave);
-                backTrackNodes.clear(); // clear the backTrackNodes
             }
         }
     }
