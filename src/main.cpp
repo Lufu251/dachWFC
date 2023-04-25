@@ -195,30 +195,32 @@ int main(void){
     wfc.loadPattern(p6);
 
     wfc.setSeed(13);
+    // 13 does creat a failure
+    // 14 does creat a failure
     wfc.setPatternSize(3,3);
     wfc.setOutputSize(90,90);
 
 
     waveGrid map;
     std::mt19937_64 gen(13);
-    wfc.startWave(map, gen);
+
     uint64_t t1 = nanoTime();
-    for (size_t i = 0; i < 357; i++){
-        wfc.generateOutput(map, gen);
-    }
+    map = wfc.generateOutput(gen);
     uint64_t t2 = nanoTime();
+
     std::cout << (t2 - t1) / 1000 / 1000.0 << " milliseconds\n";
 
     while (!WindowShouldClose())
     {
         // Update
         //----------------------------------------------------------------------------------
-        /*if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
-        wfc.setSeed(std::rand() * 100);
-        }*/
+        if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
+            wfc.setSeed(std::rand() * 100);
+        }
         
         if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
-            wfc.generateOutput(map,gen);
+            //wfc.collapseWave(map, gen);
+            map = wfc.generateOutput(gen);
         }
         //----------------------------------------------------------------------------------
 
@@ -266,10 +268,11 @@ int main(void){
                         
                         DrawText(ss.str().c_str(), x*size +2, y*size +2, 10, BLACK);
                     }
-
-                    DrawRectangleLines(x*size,y*size, size,size,BLACK);
+                    raylib::Rectangle rec(x*size,y*size, size, size);
+                    DrawRectangleLinesEx(rec, 1, BLACK);
                 }
             }
+            
         EndDrawing();
         //----------------------------------------------------------------------------------
     }
@@ -281,3 +284,63 @@ int main(void){
 
     return 0;
 }
+
+/*
+for (size_t x = 0; x < map.sizeX(); x++){
+    for (size_t y = 0; y < map.sizeY(); y++){
+        if(map(x,y).possiblePatterns.size() == 1 && map(x,y).fix == true){
+            int i = *map(x,y).possiblePatterns.begin();
+            if(i == 0){
+                DrawLine(x*size +size/2, y*size + size/2, x*size +size/2, y*size + size, GREEN);
+                DrawLine(x*size +size/2, y*size + size/2, x*size +size, y*size + size/2, GREEN);
+            }
+            else if(i == 1){
+                DrawLine(x*size +size/2, y*size + size/2, x*size +size/2, y*size, BLUE);
+                DrawLine(x*size +size/2, y*size + size/2, x*size +size, y*size + size/2, BLUE);
+            }
+            else if(i == 2){
+                DrawLine(x*size, y*size + size/2, x*size +size, y*size + size/2, BLUE);
+            }
+            else if(i == 3){
+                DrawLine(x*size +size/2, y*size + size/2, x*size +size/2, y*size, BLACK);
+                DrawLine(x*size +size/2, y*size + size/2, x*size, y*size + size/2, BLACK);
+            }
+            else if(i == 4){
+                DrawLine(x*size +size/2, y*size + size/2, x*size +size/2, y*size + size, RED);
+                DrawLine(x*size +size/2, y*size + size/2, x*size, y*size + size/2, RED);
+            }
+            else if(i == 5){
+                DrawLine(x*size +size/2, y*size, x*size +size/2, y*size + size, RED);
+            }
+            else if(i == 6){
+                DrawRectangle(x*size,y*size, size,size,WHITE);
+            }
+            DrawText(std::to_string(i).c_str(), x*size +2, y*size +2, 10, BLACK);
+        }
+        else{
+            std::stringstream ss;
+            for (size_t i = 0; i < map(x,y).possiblePatterns.size(); i++){
+                ss << map(x,y).possiblePatterns[i];
+            }
+            
+            DrawText(ss.str().c_str(), x*size +2, y*size +2, 10, BLACK);
+        }
+
+        DrawRectangleLines(x*size,y*size, size,size,BLACK);
+    }
+}
+*/
+
+/*
+for (size_t x = 0; x < map.sizeX(); x++){
+                for (size_t y = 0; y < map.sizeY(); y++){
+                    int i = map(x,y);
+                    if(i == 0){
+                        DrawRectangle(x*size,y*size, size,size,WHITE);
+                    }
+                    else if(i == 1){
+                        DrawRectangle(x*size,y*size, size,size,BLACK);
+                    }
+                }
+            }
+*/

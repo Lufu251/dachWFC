@@ -7,6 +7,8 @@
 #include <random>
 #include <queue>
 #include <algorithm>
+#include <sstream>
+#include <utility>
 
 enum direction {UP, RIGHT, DOWN, LEFT};
 
@@ -19,7 +21,8 @@ struct queueNode{
 struct backTrackNode{
     uint64_t x, y;
     std::vector<uint64_t> pP;
-    backTrackNode(uint64_t xPos, uint64_t yPos, std::vector<uint64_t> possiblePatterns): x(xPos), y(yPos), pP(possiblePatterns){}
+    bool f;
+    backTrackNode(uint64_t xPos, uint64_t yPos, std::vector<uint64_t> possiblePatterns, bool fix): x(xPos), y(yPos), pP(possiblePatterns), f(fix){}
 };
 
 
@@ -113,6 +116,8 @@ private:
 
 public:
     bool collapsed = false;
+    uint64_t startX;
+    uint64_t startY;
 
     waveGrid(){
     }
@@ -254,16 +259,29 @@ public:
     }
 
     // generate an output from all the rules
-    waveGrid generateOutput(waveGrid& wave, std::mt19937_64& gen){
-        
+    waveGrid generateOutput(std::mt19937_64& gen){
+        begin:
+        try{
+        waveGrid wave(outputSizeX, outputSizeY);
         //std::mt19937_64 gen(seed); // random generator
-        // startWave(wave, gen);
+
+        startWave(wave, gen);
         
         // start loop
+        while (wave.collapsed == false)
+        {
             collapseWave(wave, gen);
-         
-        
-        return wave; // cellTranslate the cellGrid2D
+        }
+
+        /*cellGrid2D output = convertWaveGridToCellGrid(wave);
+        return cellTranslate(output); // cellTranslate the cellGrid2D*/
+
+        return wave;
+        }
+        catch(int c)
+        {
+            goto begin;
+        }
     }
 
 public:
@@ -329,8 +347,6 @@ public:
                      
                 }
             }
-            
-
         return output;
     }
 
@@ -369,11 +385,13 @@ public:
         
         // first queueNode to start the loop
         queue.push(queueNode(collapseX, collapseY));
+        rWave(collapseX, collapseY).fix = true;
 
         // loop untile the queue is empty
         while (queue.size()){
             queueNode cn = queue.front(); // read node
             queue.pop(); // delete node after reading it
+
 
             // loop all the directions
             for (uint64_t d = 0; d < directions.size(); d++){
@@ -386,8 +404,11 @@ public:
                 }
                 else{
                     // in bound
+                    backTrackNodes.push_back(backTrackNode(dx,dy,rWave(dx,dy).possiblePatterns, rWave(dx,dy).fix));
+
+
+                    // check if the tile is not fix already 
                     if(rWave(dx,dy).fix == false){
-                        backTrackNodes.push_back(backTrackNode(dx, dy, rWave(dx, dy).possiblePatterns)); // save the current state to revert changes later
 
                         std::set<uint64_t> allPatternsInDirection; // will contain all possible patterns in the current direction
                         // iterate all the possible patterns in the current tile
@@ -396,33 +417,84 @@ public:
                                 allPatternsInDirection.insert(r);
                             }
                         }
-
-                        std::vector<uint64_t> allPatterns(allPatternsInDirection.begin(), allPatternsInDirection.end()); // convert set to vector
-
-                        // update the neighboring waveCell with allPatternsInDirection
-                        rWave(dx, dy).possiblePatterns = std::move(intersect(rWave(dx, dy).possiblePatterns, allPatterns));
-
-                        // check if there are no possible patterns
-                        if(rWave(dx, dy).possiblePatterns.size() == 0){
-                            std::cout << "seed does not collapse" << std::endl;
-                            // revert changes done in this loop
-                            for (auto bt : backTrackNodes){
-                                rWave(bt.x, bt.y).fix = false;
-                                rWave(bt.x, bt.y).possiblePatterns = bt.pP;
-                            }
-                            backTrackNodes.clear(); // clear the backTrackNodes
-                            break; // break the while loop
-                        }
+                        rWave(dx, dy).possiblePatterns = intersect(rWave(dx, dy).possiblePatterns, std::vector<uint64_t>(allPatternsInDirection.begin(), allPatternsInDirection.end()));
                     }
-                    // add the neighboring waveCell to the queue if it was not queued before
+                    
+                    // check if the tile has no possible patterns
+                    if(rWave(dx, dy).possiblePatterns.size() == 0){
+                        if(backTrackNodes.front().pP.size() == 1){
+                            // no collaps possible
+                            std::cout << "collapse not possible" << std::endl;
+                            throw 1;
+                        }
+
+                        std::cout << "no possible patterns" << std::endl;
+
+                        // revert changes done in this loop
+                        for(auto btn : backTrackNodes){
+                            rWave(btn.x, btn.y).fix = btn.f;
+                            rWave(btn.x, btn.y).possiblePatterns = btn.pP;
+                        }
+                        backTrackNodes.clear(); // clear the backTrackNodes
+                        break; // break the loop
+                    }
+
+                    // add the neighboring waveCell to the queue
                     if(rWave(dx, dy).queued == false && rWave(dx,dy).getEntropy() != patterns.size()){
                         queue.push(queueNode(dx, dy));
-                        rWave(dx, dy).queued = true;
+                        rWave(dx, dy).queued = true; // set queued to true as soon as the cell is checked
                     }
                 }
             }
         }
         rWave.resetQueuedAttribute();
+    }
+
+    std::pair<uint64_t, uint64_t> getNearestCell(waveGrid& rWave){
+        std::pair<uint64_t, uint64_t> nearestCell;
+        std::queue<queueNode> queue; // queue for pending waveCells
+
+        uint64_t lowestEntropy = -1; // Set to max Value
+        uint64_t lowestX = -1, lowestY = -1; // Set to max Value
+
+        queue.push(queueNode(rWave.startX, rWave.startY));
+        rWave(rWave.startX, rWave.startY).queued = true;
+
+        while (queue.size() != 0){
+            queueNode cn = queue.front(); // read node
+            queue.pop(); // delete node after reading it
+
+            // check if the waveCell has lower entropy than the current rWave(lowest.first, lowest.second).and is not already fixed
+            if(rWave(cn.x,cn.y).fix == false && rWave(cn.x,cn.y).getEntropy() < lowestEntropy){
+                // Set the current rWave(lowest.first, lowest.second).value to the new value
+                lowestEntropy = rWave(cn.x,cn.y).getEntropy();
+                lowestX = cn.x;
+                lowestY = cn.y;
+                rWave.collapsed = false; // set false if a valide waveCell was found
+            }
+
+            // loop all the directions
+            for (uint64_t d = 0; d < directions.size(); d++){
+                int dx = cn.x + directions[d].first; // directional x
+                int dy = cn.y + directions[d].second; // directional y
+                
+                //check for out of bounds
+                if(dx > rWave.sizeX()-1 || dy > rWave.sizeY() -1){
+                    // out of bound
+                }
+                else{
+                    // in bound
+                    // add the neighboring waveCell to the queue if it is not already queued
+                    if(rWave(dx,dy).queued == false){
+                        queue.push(queueNode(dx, dy));
+                        rWave(dx, dy).queued = true;
+                    }
+                }
+
+            }
+        }
+        rWave.resetQueuedAttribute();
+        return nearestCell = {lowestX, lowestY};
     }
 
     // start the wave
@@ -436,51 +508,42 @@ public:
         // random starting coordinates
         uint64_t startPosX = startDisX(rGen);
         uint64_t startPosY = startDisY(rGen);
+        rWave.startX = startPosX;
+        rWave.startY = startPosY;
 
         rWave(startPosX, startPosY).pickRandomPattern(rGen, patterns); // pick a random pattern for the first cell
 
-        updateNeighbors(startPosX, startPosY, rWave); // collapse once before the loop starts
+        updateNeighbors(startPosX, startPosY, rWave); // update the neighbors once before the loop starts
     }
+
+
 
     // collapse the wave once
     void collapseWave(waveGrid& rWave, std::mt19937_64& rGen){
         rWave.collapsed = true; // set to true every loop
-        uint64_t lowest = -1; // Set to max Value
-        uint64_t lowestX = -1, lowestY = -1; // Set to max Value
 
         // search waveCell with the lowest entropy
-        for (size_t x = 0; x < rWave.sizeX(); x++){
-            for (size_t y = 0; y < rWave.sizeY(); y++){
-                
-                // check if the waveCell has lower entropy than the current lowest and is not already fixed
-                if(rWave(x,y).fix == false && rWave(x,y).getEntropy() < lowest){
-                    // Set the current lowest value to the new value
-                    lowest = rWave(x,y).getEntropy();
-                    lowestX = x;
-                    lowestY = y;
-                    rWave.collapsed = false; // set false if a valide waveCell was found
-                }
-            }
-        }
+        std::pair<uint64_t,uint64_t> lowest = getNearestCell(rWave);
 
         bool skipcollapse = false;
         // check if the wave is collapsed
         if(rWave.collapsed == false){
             // check if the entropy is larger than 1 and pick a random pattern
-            if(lowest > 1){
+            if(rWave(lowest.first, lowest.second).getEntropy() > 1){
                 // pick a random tile
-                backTrackNodes.push_back(backTrackNode(lowestX, lowestY, rWave(lowestX, lowestY).possiblePatterns));
-                rWave(lowestX, lowestY).pickRandomPattern(rGen, patterns);
+                std::vector<uint64_t> currentPatterns = rWave(lowest.first, lowest.second).possiblePatterns; // set te current patterns
+                rWave(lowest.first, lowest.second).pickRandomPattern(rGen, patterns); // pick one pattern
+                currentPatterns.erase(std::remove(currentPatterns.begin(), currentPatterns.end(), rWave(lowest.first, lowest.second).possiblePatterns.front())); // remove the picked pattern from current Patterns
+                backTrackNodes.push_back(backTrackNode(lowest.first, lowest.second, currentPatterns, false)); // push back the vector with the removed pattern
             }
             // check if the tiles entropy is 1 then set the tile to fix and skip the collapseGrid
-            else if(lowest == 1){
-                rWave(lowestX, lowestY).fix = true; // set tile to fix
+            else if(rWave(lowest.first, lowest.second).getEntropy() == 1){
+                rWave(lowest.first, lowest.second).fix = true; // set tile to fix
                 skipcollapse = true;
             }
-            
             if(skipcollapse == false){
                 // collapse the grid from the newest generated tile
-                updateNeighbors(lowestX, lowestY, rWave);
+                updateNeighbors(lowest.first, lowest.second, rWave);
             }
         }
     }
